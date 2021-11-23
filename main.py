@@ -1,4 +1,5 @@
 from sqlite3 import connect as sqc
+from random import randrange as rr
 from PIL import Image as img, ImageDraw as draw
 from PyQt5.QtCore import QTimer as T, Qt
 from PyQt5.QtGui import QPixmap, QFont, QIcon
@@ -61,6 +62,35 @@ def cparser(col):
         for i in range(3):
             out += [int(c[3 * i:3 * i + 3])]
         return (tuple(out + [255]))
+
+
+# Version of generator: genA0
+def gen():
+    height = 0
+    sp, lsp, bsp = 0, 0, False
+    res = []
+    for i in range(rr(20, 100)):
+        if rr(4) == 0 and lsp >= 3:
+            if rr(2) == 0 and height > 0:
+                height -= 1
+            elif height < 10:
+                height += 1
+            if lsp != 3:
+                lsp = 3
+        elif rr(5) == 0 and sp < 3 and lsp >= 5:
+                bsp = True
+        if bsp:
+            nxt = 'B' * height + 'S'
+            bsp = False
+            lsp = 0
+        else:
+            nxt = 'B' * height
+            lsp += 1
+        if nxt:
+            res += [nxt]
+        else:
+            res += ['-']
+    return ' '.join(res)
 
 
 # Функция для создания картинок для разных объектов, описанных в level.l.
@@ -244,16 +274,23 @@ class Game(QWidget):
         self.launch.resize(300, 100)
         self.launch.clicked.connect(self.lvl)
         self.clicked = False
+        self.generator = QPushButton('Генератор', self)
+        self.generator.resize(300, 50)
+        self.generator.move(450, 240)
+        self.generator.setFont(QFont('Arial', 20))
+        self.generator.clicked.connect(self.genlvl)
         self.history = QPushButton('Уровни', self)
         self.history.setFont(QFont('Arial', 20))
         self.history.resize(300, 50)
-        self.history.move(450, 240)
-        if self.lvlname:
-            self.history.hide()
+        self.history.move(450, 310)
         self.submit = QPushButton('Сохранить', self)
         self.submit.setFont(QFont('Arial', 20))
         self.submit.resize(300, 50)
-        self.submit.move(450, 310)
+        self.submit.move(450, 380)
+        if self.parent:
+            self.generator.hide()
+            self.history.hide()
+            self.submit.move(450, 240)
         self.submit.clicked.connect(self.levelsave)
         self.submit.hide()
         self.history.clicked.connect(self.levelhist)
@@ -263,7 +300,7 @@ class Game(QWidget):
         if not exist('level.l'):
             with open('level.l', 'w'):
                 pass
-        if self.lvlname:
+        if self.lvlcont:
             self.textcont = self.lvlcont
         else:
             with open('level.l') as f:
@@ -281,7 +318,7 @@ class Game(QWidget):
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 content TEXT);''')
         else:
-            if not self.lvlname:
+            if not self.parent:
                 self.db = sqc('levels_db.sqlite')
                 self.dbc = self.db.cursor()
             else:
@@ -376,7 +413,8 @@ class Game(QWidget):
         self.player = GameObject(self, imgenerator('p', 'black', 50, 50, 2, 0), 50, 50, False, False)
         self.player.move(700, 600)
         self.player.hide()
-        if self.lvlname:
+        self.opened = []
+        if self.lvlcont:
             self.lvl()
 
     def resetVars(self):
@@ -395,11 +433,14 @@ class Game(QWidget):
         self.launch.hide()
         self.history.hide()
         self.submit.hide()
+        self.generator.hide()
         if self.lvlname:
+            self.dbc.execute('''UPDATE levels SET attempts = attempts + 1
+                WHERE name = "''' + self.lvlname + '"')
             self.att = list(self.dbc.execute('''SELECT attempts FROM levels
                 WHERE name = "''' + self.lvlname + '"'))[0][0]
         else:
-            self.att = 0
+            self.att = 1
         self.attprov.setText('Attempts: ' + str(self.att))
         if not self.dmode:
             self.attprov.show()
@@ -408,6 +449,9 @@ class Game(QWidget):
 
     def mousePressEvent(self, event):
         self.clicked = True
+
+    def mouseReleaseEvent(self, event):
+        self.clicked = False
 
     # Метод для начала новой игры после проигрыша.
     def new(self):
@@ -445,11 +489,17 @@ class Game(QWidget):
 
     def levelsave(self):
         self.second = Submitter(self.textcont, str(self.att), self.dbc)
+        self.opened += [self.second]
         self.second.show()
     
     def levelhist(self):
         self.third = Levelhistory(self, self.dbc)
         self.third.show()
+        self.hide()
+
+    def genlvl(self):
+        self.game2 = Game(self, lvlcont=gen())
+        self.game2.show()
         self.hide()
 
     # Действия, которые выполняются каждый кадр (50 раз в секунду).
@@ -496,25 +546,28 @@ class Game(QWidget):
         if self.ctr < 5:
             self.clicked = False
         if self.clicked:
-            self.clicked = False
+            if self.mode == 1:
+                self.clicked = False
             if not (self.up or self.mode):
                 self.up = 10
-            if self.mode == 1 and self.up <= 0:
+            if self.mode and self.up <= 0:
                 self.up = 5
         if self.wait:
             self.wait -= 1
         if self.up > 0:
             if self.player.y() > 0:
-                self.player.move(self.player.x(), self.player.y() - 10 - 5 * self.mode)
+                self.player.move(self.player.x(), self.player.y() - 10 - 5 * (1 - abs(self.mode - 1)))
             self.up -= 1
             if not self.up:
                 self.up = -10
                 self.wait = 3
+                if self.mode == 2:
+                    self.wait = 1
         if self.up < 0 and not self.wait:
             if self.player.y() == 600:
                 self.up = 0
             else:
-                self.player.move(self.player.x(), self.player.y() + 10 - 5 * self.mode)
+                self.player.move(self.player.x(), self.player.y() + 10 - 5 * (1 - abs(self.mode - 1)))
                 self.up += 1
         self.onBlock = False
         for i in self.spp:
@@ -541,6 +594,7 @@ class Game(QWidget):
             if self.player.y() == 600 and self.delayed_end != 1:
                 self.t.stop()
                 self.new()
+                self.att -= 1
                 self.player.hide()
                 if self.dmode:
                     self.title.setText('Демонстрация завершена.')
@@ -548,12 +602,14 @@ class Game(QWidget):
                     self.title.setText('Уровень пройден!')
                     if not self.lvlname:
                         self.submit.show()
+                        print(self.att)
                 self.attprov.hide()
                 self.launch.setText('Заново')
                 self.title.show()
                 self.launch.show()
-                if not self.lvlname:
+                if not self.parent:
                     self.history.show()
+                    self.generator.show()
             else:
                 # Исправление бага, при котором игра заканчивалась раньше времени, если в конце стоял
                 # блок с увеличенной длиной.
@@ -563,12 +619,15 @@ class Game(QWidget):
     def closeEvent(self, event):
         if self.parent:
             self.parent.show()
-            self.parent.lvls = list(self.dbc.execute('''SELECT * FROM levels'''))
-            self.parent.loadcontent()
+            if self.lvlname:
+                self.parent.lvls = list(self.dbc.execute('''SELECT * FROM levels'''))
+                self.parent.loadcontent()
         else:
             self.db.commit()
             self.db.close()
         self.t.stop()
+        for i in self.opened:
+            i.hide()
 
 
 # Форма для сохранения уровней.
