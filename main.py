@@ -64,7 +64,7 @@ def cparser(col):
         return (tuple(out + [255]))
 
 
-# Version of generator: genA0
+# Функция генератора.
 def gen():
     height = 0
     sp, lsp, bsp = 0, 0, False
@@ -602,7 +602,6 @@ class Game(QWidget):
                     self.title.setText('Уровень пройден!')
                     if not self.lvlname:
                         self.submit.show()
-                        print(self.att)
                 self.attprov.hide()
                 self.launch.setText('Заново')
                 self.title.show()
@@ -611,8 +610,6 @@ class Game(QWidget):
                     self.history.show()
                     self.generator.show()
             else:
-                # Исправление бага, при котором игра заканчивалась раньше времени, если в конце стоял
-                # блок с увеличенной длиной.
                 if not self.delayed_end:
                     self.delayed_end = 1
 
